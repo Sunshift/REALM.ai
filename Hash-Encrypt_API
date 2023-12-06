@@ -1,0 +1,90 @@
+!pip install pycryptodome
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+import base64
+import json
+
+
+#This is a test model card represented as a dictionary. This might still change. 
+
+model_card = {
+    "model_name": "Model A",
+    "model_version": "1.0",
+    "model_description": "This is a description of Model A.",
+    "model_parameters": {
+        "param1": "value1",
+        "param2": "value2"
+    }
+}
+
+x = model_card
+
+#The key for encryption and decryption. 
+
+key = '101IknowTheCode'.ljust(16)  # Replace with a strong secret key
+
+#Hashing/encryption API 
+
+def serialize_model_card(x):
+    # Convert the model card into a JSON string
+    serialized_model_card = json.dumps(x)
+    return serialized_model_card
+
+def encrypt_model_card(x, key):
+    # Generate a random IV
+    iv = get_random_bytes(AES.block_size)
+
+    # Serialize the model card
+    serialized_model_card = serialize_model_card(x)
+
+    # Use AES for encryption with CBC mode and the random IV
+    cipher = AES.new(key.encode(), AES.MODE_CBC, iv)
+
+    # Pad the data before encrypting
+    padded_data = pad(serialized_model_card.encode(), AES.block_size)
+
+    # Encrypt the data
+    encrypted_data = cipher.encrypt(padded_data)
+
+    # Combine IV and encrypted data, then encode in base64 for storage
+    hashed_value = base64.b64encode(iv + encrypted_data).decode()
+
+    return hashed_value
+
+# Hashing
+hashed_value = encrypt_model_card(model_card, key)
+print(f'Hashed value: {hashed_value}')
+
+#Unhashing/decryption API 
+
+def decrypt_model_card(hashed_value, key):
+    # Decode the base64 encoded hashed value
+    hashed_bytes = base64.b64decode(hashed_value)
+
+    # Extract the IV from the hashed value
+    iv = hashed_bytes[:AES.block_size]
+
+    # Use AES for decryption with the extracted IV
+    cipher = AES.new(key.encode(), AES.MODE_CBC, iv)
+
+    try:
+        # Decrypt and unpad the data
+        decrypted_data = unpad(cipher.decrypt(hashed_bytes[AES.block_size:]), AES.block_size)
+
+        # Try decoding as UTF-8
+        try:
+            model_card = json.loads(decrypted_data.decode('utf-8'))
+        except UnicodeDecodeError:
+            # If decoding as UTF-8 fails, try Latin-1
+            model_card = json.loads(decrypted_data.decode('latin-1'))
+
+        return model_card
+    except Exception as e:
+        print(f"Error during decryption: {str(e)}")
+        return None
+
+# Unhashing
+unhashed_model_card = decrypt_model_card(hashed_value, key)
+print('Unhashed model card:', unhashed_model_card)
